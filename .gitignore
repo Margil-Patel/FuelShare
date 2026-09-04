@@ -1,22 +1,39 @@
-# Python
-__pycache__/
-*.py[cod]
+# Environment Secrets
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env
+
+# Python & Virtual Environments
 .venv/
 venv/
-.env
+env/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+*.log
 
-# Node / Next.js
+# Databases & SQLite
+*.db
+*.sqlite
+*.sqlite3
+fuelshare_demo.db
+
+# Node & Next.js
 node_modules/
 .next/
 out/
+dist/
+build/
+.npm
+*.tsbuildinfo
 
-# IDE
-.vscode/
-.idea/
-
-# OS
+# OS & IDE
 .DS_Store
 Thumbs.db
-
-# Logs
-*.log
+.vscode/
+.idea/
