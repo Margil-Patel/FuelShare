@@ -68,11 +68,30 @@ class PaymentService:
             )
 
         # Calculate exact cost contribution per participant
-        try:
-            cost_breakdown = FuelCalculatorService.get_fuel_cost_breakdown(db, current_user, fuel_share_id)
-            cost_per_person = float(cost_breakdown.cost_per_participant)
-        except Exception:
-            cost_per_person = float(trip.estimated_fuel_cost)
+        # 1. Prioritize corridor match proportional segment fare
+        from app.models.corridor_match import CorridorMatch
+        from app.models.ride_request import RideRequest
+
+        corridor_match = (
+            db.query(CorridorMatch)
+            .join(RideRequest, RideRequest.id == CorridorMatch.ride_request_id)
+            .filter(
+                CorridorMatch.fuel_share_id == fuel_share_id,
+                RideRequest.passenger_id == current_user.id,
+            )
+            .order_by(CorridorMatch.id.desc())
+            .first()
+        )
+
+        cost_per_person = 0.0
+        if corridor_match and corridor_match.fare_estimate > 0:
+            cost_per_person = float(corridor_match.fare_estimate)
+        else:
+            try:
+                cost_breakdown = FuelCalculatorService.get_fuel_cost_breakdown(db, current_user, fuel_share_id)
+                cost_per_person = float(cost_breakdown.cost_per_participant)
+            except Exception:
+                cost_per_person = float(trip.estimated_fuel_cost)
 
         if cost_per_person <= 0:
             cost_per_person = float(trip.estimated_fuel_cost)

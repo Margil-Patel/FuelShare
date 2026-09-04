@@ -51,50 +51,58 @@ function decodePolyline(encoded: string): Array<[number, number]> {
   return coords;
 }
 
+let isLeafletPickerDomUtilPatched = false;
+
 function patchLeafletDomUtil(L: any) {
-  if (!L || (L as any)._offsetWidthPatched) return;
-  (L as any)._offsetWidthPatched = true;
+  if (!L || isLeafletPickerDomUtilPatched) return;
+  isLeafletPickerDomUtilPatched = true;
 
-  if (L.DomUtil) {
-    L.DomUtil.getSizedParentNode = function (element: any) {
-      if (!element) return (typeof document !== 'undefined' ? document.body : null);
-      let curr = element.parentNode || element;
-      while (curr && typeof document !== 'undefined' && curr !== document.body && curr !== document) {
-        if (curr.offsetWidth && curr.offsetHeight) {
-          return curr;
+  try {
+    const DomUtil = L.DomUtil || (L.default && L.default.DomUtil);
+    if (DomUtil) {
+      DomUtil.getSizedParentNode = function (element: any) {
+        if (!element) return typeof document !== 'undefined' ? document.body : null;
+        let curr = element.parentNode || element;
+        while (curr && typeof document !== 'undefined' && curr !== document.body && curr !== document) {
+          if (curr.offsetWidth && curr.offsetHeight) {
+            return curr;
+          }
+          curr = curr.parentNode;
         }
-        curr = curr.parentNode;
-      }
-      return typeof document !== 'undefined' ? (document.body || element) : element;
-    };
+        return typeof document !== 'undefined' ? document.body || element : element;
+      };
 
-    L.DomUtil.getScale = function (element: any) {
-      if (!element || !element.getBoundingClientRect) {
-        return { x: 1, y: 1, boundingClientRect: { width: 0, height: 0, top: 0, bottom: 0, left: 0, right: 0 } };
-      }
-      try {
-        const rect = element.getBoundingClientRect();
-        return {
-          x: element.offsetWidth ? (rect.width / element.offsetWidth || 1) : 1,
-          y: element.offsetHeight ? (rect.height / element.offsetHeight || 1) : 1,
-          boundingClientRect: rect,
-        };
-      } catch {
-        return { x: 1, y: 1, boundingClientRect: { width: 0, height: 0, top: 0, bottom: 0, left: 0, right: 0 } };
-      }
-    };
-  }
+      DomUtil.getScale = function (element: any) {
+        if (!element || !element.getBoundingClientRect) {
+          return { x: 1, y: 1, boundingClientRect: { width: 0, height: 0, top: 0, bottom: 0, left: 0, right: 0 } };
+        }
+        try {
+          const rect = element.getBoundingClientRect();
+          return {
+            x: element.offsetWidth ? rect.width / element.offsetWidth || 1 : 1,
+            y: element.offsetHeight ? rect.height / element.offsetHeight || 1 : 1,
+            boundingClientRect: rect,
+          };
+        } catch {
+          return { x: 1, y: 1, boundingClientRect: { width: 0, height: 0, top: 0, bottom: 0, left: 0, right: 0 } };
+        }
+      };
+    }
 
-  if (L.Draggable && L.Draggable.prototype) {
-    const origOnDown = L.Draggable.prototype._onDown;
-    L.Draggable.prototype._onDown = function (e: any) {
-      if (!this._element) return;
-      try {
-        origOnDown.call(this, e);
-      } catch {
-        // Suppress drag error if element is detached/unmeasured
-      }
-    };
+    const Draggable = L.Draggable || (L.default && L.default.Draggable);
+    if (Draggable && Draggable.prototype) {
+      const origOnDown = Draggable.prototype._onDown;
+      Draggable.prototype._onDown = function (e: any) {
+        if (!this._element) return;
+        try {
+          if (origOnDown) origOnDown.call(this, e);
+        } catch {
+          // Suppress drag error if element is detached/unmeasured
+        }
+      };
+    }
+  } catch {
+    // Ignore patching errors in strict/sealed ESM environments
   }
 }
 

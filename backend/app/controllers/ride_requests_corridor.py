@@ -129,7 +129,7 @@ def get_corridor_matches_for_request(
     eff_buffer = buffer_m if buffer_m is not None else settings.CORRIDOR_BUFFER_M
     eff_detour_km = detour_max_km if detour_max_km is not None else settings.CORRIDOR_DETOUR_MAX_KM
     eff_detour_pct = detour_max_pct if detour_max_pct is not None else settings.CORRIDOR_DETOUR_MAX_PCT
-    eff_window = time_window_minutes if time_window_minutes is not None else settings.CORRIDOR_TIME_WINDOW_MINUTES
+    eff_window = time_window_minutes
 
     results = CorridorMatchingService.find_corridor_matches_for_request(
         db=db,

@@ -141,6 +141,21 @@ class FuelCalculatorService:
                 detail="Not authorized to view fuel cost details for this Fuel Share",
             )
 
+        # Check if current user is a corridor passenger (traveling C -> D)
+        from app.models.corridor_match import CorridorMatch
+        from app.models.ride_request import RideRequest
+
+        corridor_match = (
+            db.query(CorridorMatch)
+            .join(RideRequest, RideRequest.id == CorridorMatch.ride_request_id)
+            .filter(
+                CorridorMatch.fuel_share_id == fuel_share_id,
+                RideRequest.passenger_id == current_user.id,
+            )
+            .order_by(CorridorMatch.id.desc())
+            .first()
+        )
+
         # Retrieve vehicle information for creator
         vehicle = (
             db.query(Vehicle)
@@ -148,17 +163,19 @@ class FuelCalculatorService:
             .order_by(Vehicle.created_at.desc())
             .first()
         )
-        if not vehicle:
+        if not vehicle and not corridor_match:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="No vehicle registered for the creator of this Fuel Share. Vehicle mileage is required.",
             )
 
-        if vehicle.mileage <= 0:
+        if vehicle and vehicle.mileage <= 0 and not corridor_match:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Vehicle mileage must be greater than zero.",
             )
+
+        vehicle_mileage = vehicle.mileage if vehicle and vehicle.mileage > 0 else Decimal("15.0")
 
         # Retrieve distance
         distance_km = trip.estimated_distance
@@ -170,13 +187,7 @@ class FuelCalculatorService:
                 trip.destination_longitude,
             )
 
-        if distance_km <= 0:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid trip distance.",
-            )
-
-        # Determine participant count (Creator + Accepted JoinRequests)
+        # Retrieve accepted participants count
         accepted_requests_count = (
             db.query(JoinRequest)
             .filter(
@@ -196,7 +207,7 @@ class FuelCalculatorService:
 
         # Perform calculations
         fuel_required = FuelCalculatorService.calculate_fuel_required(
-            distance_km, vehicle.mileage
+            distance_km, vehicle_mileage
         )
         total_cost = FuelCalculatorService.calculate_total_fuel_cost(
             fuel_required, fuel_price
@@ -213,11 +224,33 @@ class FuelCalculatorService:
             fuel_required, participant_count
         )
 
+        # If current user is a corridor passenger (traveling C -> D), their share is the corridor fare estimate
+        from app.models.corridor_match import CorridorMatch
+        from app.models.ride_request import RideRequest
+
+        corridor_match = (
+            db.query(CorridorMatch)
+            .join(RideRequest, RideRequest.id == CorridorMatch.ride_request_id)
+            .filter(
+                CorridorMatch.fuel_share_id == fuel_share_id,
+                RideRequest.passenger_id == current_user.id,
+            )
+            .order_by(CorridorMatch.id.desc())
+            .first()
+        )
+        if corridor_match and corridor_match.fare_estimate > 0:
+            cost_per_person = FuelCalculatorService._round(FuelCalculatorService._to_decimal(corridor_match.fare_estimate))
+            savings_per_person = (
+                FuelCalculatorService.calculate_estimated_savings_per_participant(
+                    total_cost, cost_per_person
+                )
+            )
+
         return FuelCostResponse(
             fuel_share_id=trip.id,
             distance_km=float(distance_km),
             fuel_price_per_litre=float(fuel_price),
-            vehicle_mileage_km_per_litre=float(vehicle.mileage),
+            vehicle_mileage_km_per_litre=float(vehicle_mileage),
             fuel_required_litres=float(fuel_required),
             total_fuel_cost=float(total_cost),
             participant_count=participant_count,

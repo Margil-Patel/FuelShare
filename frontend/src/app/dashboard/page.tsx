@@ -70,14 +70,20 @@ export default function DashboardPage() {
               Real-time fuel sharing savings, environmental impact, and trip management.
             </p>
           </div>
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-2 flex-wrap items-center">
             <Link href="/fuel-shares/create">
-              <Button className="bg-white hover:bg-emerald-50 text-emerald-800 font-bold shadow">
+              <Button
+                variant="outline"
+                className="bg-white hover:bg-slate-100 text-emerald-800 font-bold border-none shadow-md"
+              >
                 + Offer Trip
               </Button>
             </Link>
             <Link href="/fuel-shares">
-              <Button variant="secondary" className="bg-emerald-800/60 hover:bg-emerald-800 text-white font-bold">
+              <Button
+                variant="outline"
+                className="bg-white/20 hover:bg-white/30 text-white font-bold border border-white/40 shadow-md backdrop-blur-sm"
+              >
                 🔍 Find Trips
               </Button>
             </Link>
@@ -87,7 +93,7 @@ export default function DashboardPage() {
         {error && <ErrorAlert message={error} />}
 
         {/* Quick Actions Ribbon */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
           <Link href="/fuel-shares/create">
             <div className="p-4 bg-white border border-slate-200 hover:border-emerald-500 rounded-2xl shadow-sm hover:shadow transition-all text-center group cursor-pointer">
               <div className="text-2xl mb-1 group-hover:scale-110 transition-transform">🚗</div>
@@ -95,24 +101,31 @@ export default function DashboardPage() {
             </div>
           </Link>
 
+          <Link href="/corridor-matches">
+            <div className="p-4 bg-white border border-slate-200 hover:border-indigo-500 rounded-2xl shadow-sm hover:shadow transition-all text-center group cursor-pointer">
+              <div className="text-2xl mb-1 group-hover:scale-110 transition-transform">🗺️</div>
+              <span className="text-xs font-bold text-slate-800 group-hover:text-indigo-600">Find by Route</span>
+            </div>
+          </Link>
+
           <Link href="/fuel-shares">
             <div className="p-4 bg-white border border-slate-200 hover:border-teal-500 rounded-2xl shadow-sm hover:shadow transition-all text-center group cursor-pointer">
               <div className="text-2xl mb-1 group-hover:scale-110 transition-transform">🔍</div>
-              <span className="text-xs font-bold text-slate-800 group-hover:text-teal-600">Find Trips</span>
+              <span className="text-xs font-bold text-slate-800 group-hover:text-teal-600">All Trips</span>
+            </div>
+          </Link>
+
+          <Link href="/my-requests">
+            <div className="p-4 bg-white border border-slate-200 hover:border-amber-500 rounded-2xl shadow-sm hover:shadow transition-all text-center group cursor-pointer">
+              <div className="text-2xl mb-1 group-hover:scale-110 transition-transform">📋</div>
+              <span className="text-xs font-bold text-slate-800 group-hover:text-amber-600">My Requests</span>
             </div>
           </Link>
 
           <Link href="/my-trips">
-            <div className="p-4 bg-white border border-slate-200 hover:border-indigo-500 rounded-2xl shadow-sm hover:shadow transition-all text-center group cursor-pointer">
-              <div className="text-2xl mb-1 group-hover:scale-110 transition-transform">🎫</div>
-              <span className="text-xs font-bold text-slate-800 group-hover:text-indigo-600">My Trips</span>
-            </div>
-          </Link>
-
-          <Link href="/vehicles">
             <div className="p-4 bg-white border border-slate-200 hover:border-purple-500 rounded-2xl shadow-sm hover:shadow transition-all text-center group cursor-pointer">
-              <div className="text-2xl mb-1 group-hover:scale-110 transition-transform">⚙️</div>
-              <span className="text-xs font-bold text-slate-800 group-hover:text-purple-600">My Vehicles</span>
+              <div className="text-2xl mb-1 group-hover:scale-110 transition-transform">🎫</div>
+              <span className="text-xs font-bold text-slate-800 group-hover:text-purple-600">My Trips</span>
             </div>
           </Link>
         </div>

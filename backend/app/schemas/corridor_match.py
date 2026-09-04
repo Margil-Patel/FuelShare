@@ -61,7 +61,7 @@ class CorridorMatchListResponse(BaseModel):
     total_matches: int
     buffer_m: int = Field(..., description="Buffer distance used (m)")
     detour_max_km: float
-    time_window_minutes: int
+    time_window_minutes: int | None = None
     matches: list[CorridorMatchResultResponse]
 
 

@@ -29,8 +29,8 @@ export default function RiderCorridorPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [bufferM, setBufferM] = useState(500);
-  const [timeWindow, setTimeWindow] = useState(30);
+  const [bufferM, setBufferM] = useState(1000);
+  const [timeWindow, setTimeWindow] = useState<number | undefined>(undefined);
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchMatches = async (buf?: number, tw?: number) => {
@@ -38,7 +38,7 @@ export default function RiderCorridorPage({
       setRefreshing(true);
       const data = await getRiderCorridorMatchesApi(fuelShareId, {
         buffer_m: buf ?? bufferM,
-        time_window_minutes: tw ?? timeWindow,
+        time_window_minutes: tw !== undefined ? tw : timeWindow,
       });
       setMatches(data.matches);
     } catch (err: any) {

@@ -36,50 +36,58 @@ interface RouteMapProps {
  *
  * Uses dynamic import inside useEffect to avoid SSR issues with Leaflet.
  */
+let isLeafletDomUtilPatched = false;
+
 function patchLeafletDomUtil(L: any) {
-  if (!L || (L as any)._offsetWidthPatched) return;
-  (L as any)._offsetWidthPatched = true;
+  if (!L || isLeafletDomUtilPatched) return;
+  isLeafletDomUtilPatched = true;
 
-  if (L.DomUtil) {
-    L.DomUtil.getSizedParentNode = function (element: any) {
-      if (!element) return (typeof document !== 'undefined' ? document.body : null);
-      let curr = element.parentNode || element;
-      while (curr && typeof document !== 'undefined' && curr !== document.body && curr !== document) {
-        if (curr.offsetWidth && curr.offsetHeight) {
-          return curr;
+  try {
+    const DomUtil = L.DomUtil || (L.default && L.default.DomUtil);
+    if (DomUtil) {
+      DomUtil.getSizedParentNode = function (element: any) {
+        if (!element) return typeof document !== 'undefined' ? document.body : null;
+        let curr = element.parentNode || element;
+        while (curr && typeof document !== 'undefined' && curr !== document.body && curr !== document) {
+          if (curr.offsetWidth && curr.offsetHeight) {
+            return curr;
+          }
+          curr = curr.parentNode;
         }
-        curr = curr.parentNode;
-      }
-      return typeof document !== 'undefined' ? (document.body || element) : element;
-    };
+        return typeof document !== 'undefined' ? document.body || element : element;
+      };
 
-    L.DomUtil.getScale = function (element: any) {
-      if (!element || !element.getBoundingClientRect) {
-        return { x: 1, y: 1, boundingClientRect: { width: 0, height: 0, top: 0, bottom: 0, left: 0, right: 0 } };
-      }
-      try {
-        const rect = element.getBoundingClientRect();
-        return {
-          x: element.offsetWidth ? (rect.width / element.offsetWidth || 1) : 1,
-          y: element.offsetHeight ? (rect.height / element.offsetHeight || 1) : 1,
-          boundingClientRect: rect,
-        };
-      } catch {
-        return { x: 1, y: 1, boundingClientRect: { width: 0, height: 0, top: 0, bottom: 0, left: 0, right: 0 } };
-      }
-    };
-  }
+      DomUtil.getScale = function (element: any) {
+        if (!element || !element.getBoundingClientRect) {
+          return { x: 1, y: 1, boundingClientRect: { width: 0, height: 0, top: 0, bottom: 0, left: 0, right: 0 } };
+        }
+        try {
+          const rect = element.getBoundingClientRect();
+          return {
+            x: element.offsetWidth ? rect.width / element.offsetWidth || 1 : 1,
+            y: element.offsetHeight ? rect.height / element.offsetHeight || 1 : 1,
+            boundingClientRect: rect,
+          };
+        } catch {
+          return { x: 1, y: 1, boundingClientRect: { width: 0, height: 0, top: 0, bottom: 0, left: 0, right: 0 } };
+        }
+      };
+    }
 
-  if (L.Draggable && L.Draggable.prototype) {
-    const origOnDown = L.Draggable.prototype._onDown;
-    L.Draggable.prototype._onDown = function (e: any) {
-      if (!this._element) return;
-      try {
-        origOnDown.call(this, e);
-      } catch {
-        // Suppress drag error if element is detached/unmeasured
-      }
-    };
+    const Draggable = L.Draggable || (L.default && L.default.Draggable);
+    if (Draggable && Draggable.prototype) {
+      const origOnDown = Draggable.prototype._onDown;
+      Draggable.prototype._onDown = function (e: any) {
+        if (!this._element) return;
+        try {
+          if (origOnDown) origOnDown.call(this, e);
+        } catch {
+          // Suppress drag error if element is detached/unmeasured
+        }
+      };
+    }
+  } catch {
+    // Ignore patching errors in strict/sealed ESM environments
   }
 }
 
@@ -98,11 +106,14 @@ export const RouteMap: React.FC<RouteMapProps> = ({
   const mapRef = useRef<any>(null);
 
   useEffect(() => {
+    let isMounted = true;
     if (!containerRef.current || mapRef.current) return;
 
     // Dynamically import Leaflet to avoid SSR issues
     import('leaflet').then((L) => {
+      if (!isMounted || !containerRef.current || mapRef.current) return;
       patchLeafletDomUtil(L);
+
       // Inject Leaflet CSS if not already present
       if (!document.getElementById('leaflet-css')) {
         const link = document.createElement('link');
@@ -113,15 +124,34 @@ export const RouteMap: React.FC<RouteMapProps> = ({
       }
 
       // Fix default icon URLs broken by webpack
-      delete (L.Icon.Default.prototype as any)._getIconUrl;
-      L.Icon.Default.mergeOptions({
-        iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-        iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-        shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-      });
+      try {
+        delete (L.Icon.Default.prototype as any)._getIconUrl;
+        L.Icon.Default.mergeOptions({
+          iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+          iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+          shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+        });
+      } catch {
+        // ignore
+      }
 
-      const map = L.map(containerRef.current!, { zoomControl: true, scrollWheelZoom: false });
-      mapRef.current = map;
+      // Clear any previous leaflet instance from container
+      if ((containerRef.current as any)._leaflet_id) {
+        try {
+          delete (containerRef.current as any)._leaflet_id;
+        } catch {
+          // ignore
+        }
+      }
+
+      let map: any = null;
+      try {
+        map = L.map(containerRef.current, { zoomControl: true, scrollWheelZoom: false });
+        mapRef.current = map;
+      } catch {
+        // Already initialized or double-mounted
+        return;
+      }
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
@@ -192,12 +222,12 @@ export const RouteMap: React.FC<RouteMapProps> = ({
             iconAnchor: [7, 7],
           });
           L.marker([originPt.lat, originPt.lng], { icon: greenIcon })
-            .bindTooltip(`<b>A:</b> ${origin?.label ?? 'Origin'}`, { direction: 'top' })
+            .bindTooltip(`<b>Origin:</b> ${origin?.label ?? 'Origin'}`, { direction: 'top' })
             .addTo(map);
           allPoints.push(L.latLng(originPt.lat, originPt.lng));
         }
 
-        // --- Destination marker (B) — red ---
+        // --- Destination marker — red ---
         const destPt = destination ?? (routeCoords.length > 1 ? { lat: routeCoords[routeCoords.length - 1].lat, lng: routeCoords[routeCoords.length - 1].lng } : null);
         if (destPt && mapRef.current) {
           const redIcon = L.divIcon({
@@ -207,12 +237,12 @@ export const RouteMap: React.FC<RouteMapProps> = ({
             iconAnchor: [7, 7],
           });
           L.marker([destPt.lat, destPt.lng], { icon: redIcon })
-            .bindTooltip(`<b>B:</b> ${destination?.label ?? 'Destination'}`, { direction: 'top' })
+            .bindTooltip(`<b>Destination:</b> ${destination?.label ?? 'Destination'}`, { direction: 'top' })
             .addTo(map);
           allPoints.push(L.latLng(destPt.lat, destPt.lng));
         }
 
-        // --- Pickup marker (C) — orange ---
+        // --- Pickup marker — orange ---
         if (pickup && mapRef.current) {
           const orangeIcon = L.divIcon({
             html: `<div style="background:#F97316;border:2px solid white;border-radius:4px;width:14px;height:14px;box-shadow:0 2px 4px rgba(0,0,0,0.4);transform:rotate(45deg)"></div>`,
@@ -221,12 +251,12 @@ export const RouteMap: React.FC<RouteMapProps> = ({
             iconAnchor: [7, 7],
           });
           L.marker([pickup.lat, pickup.lng], { icon: orangeIcon })
-            .bindTooltip(`<b>C (Pickup):</b> ${pickup.label ?? 'Your pickup'}`, { direction: 'top' })
+            .bindTooltip(`<b>Pickup Location:</b> ${pickup.label ?? 'Your pickup'}`, { direction: 'top' })
             .addTo(map);
           allPoints.push(L.latLng(pickup.lat, pickup.lng));
         }
 
-        // --- Drop marker (D) — purple ---
+        // --- Drop-off marker — purple ---
         if (drop && mapRef.current) {
           const purpleIcon = L.divIcon({
             html: `<div style="background:#7C3AED;border:2px solid white;border-radius:4px;width:14px;height:14px;box-shadow:0 2px 4px rgba(0,0,0,0.4);transform:rotate(45deg)"></div>`,
@@ -235,7 +265,7 @@ export const RouteMap: React.FC<RouteMapProps> = ({
             iconAnchor: [7, 7],
           });
           L.marker([drop.lat, drop.lng], { icon: purpleIcon })
-            .bindTooltip(`<b>D (Drop):</b> ${drop.label ?? 'Your drop'}`, { direction: 'top' })
+            .bindTooltip(`<b>Drop-off Location:</b> ${drop.label ?? 'Your drop-off'}`, { direction: 'top' })
             .addTo(map);
           allPoints.push(L.latLng(drop.lat, drop.lng));
         }
@@ -286,8 +316,13 @@ export const RouteMap: React.FC<RouteMapProps> = ({
     });
 
     return () => {
+      isMounted = false;
       if (mapRef.current) {
-        mapRef.current.remove();
+        try {
+          mapRef.current.remove();
+        } catch {
+          // ignore
+        }
         mapRef.current = null;
       }
     };

@@ -30,7 +30,7 @@ class RideRequestService:
         drop_name: str,
         drop_latitude: float,
         drop_longitude: float,
-        desired_departure: datetime.datetime,
+        desired_departure: datetime.datetime | None = None,
         seats_needed: int = 1,
     ) -> RideRequest:
         """Create a new OPEN RideRequest for the authenticated passenger."""
@@ -44,6 +44,9 @@ class RideRequestService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="seats_needed must be at least 1.",
             )
+
+        if desired_departure is None:
+            desired_departure = datetime.datetime.utcnow()
 
         ride_request = RideRequest(
             passenger_id=current_user.id,

@@ -16,6 +16,7 @@ export const Navbar: React.FC = () => {
         { name: 'Find Fuel Share', href: '/fuel-shares' },
         { name: 'Find by Route', href: '/corridor-matches' },
         { name: 'My Trips', href: '/my-trips' },
+        { name: 'My Requests', href: '/my-requests' },
         { name: 'Create Offer', href: '/fuel-shares/create' },
         { name: 'My Vehicles', href: '/vehicles' },
         { name: 'Profile', href: '/profile' },

@@ -72,12 +72,17 @@ export const PaymentCard: React.FC<PaymentCardProps> = ({
       // 1. Create order on backend
       const orderData = await createPaymentOrderApi(fuelShareId);
 
-      // 2. Load Razorpay SDK
-      const sdkLoaded = await loadRazorpayScript();
+      const isTestMode =
+        !orderData.key_id ||
+        orderData.key_id === 'rzp_test_fuelshare123' ||
+        orderData.order_id.startsWith('order_test_') ||
+        orderData.order_id.startsWith('order_mock_');
 
-      if (!sdkLoaded || !window.Razorpay) {
-        // Fallback for development/testing without external CDN access
-        const mockPaymentId = `pay_mock_${Date.now()}`;
+      if (isTestMode) {
+        // Smooth test simulation for local development / test sandbox
+        await new Promise((resolve) => setTimeout(resolve, 800));
+
+        const mockPaymentId = `pay_test_${Date.now()}`;
         const mockSig = `sig_valid_test_${orderData.order_id}`;
 
         const verifiedPayment = await verifyPaymentApi({
@@ -88,12 +93,32 @@ export const PaymentCard: React.FC<PaymentCardProps> = ({
 
         setPayment(verifiedPayment);
         if (onPaymentSuccess) onPaymentSuccess(verifiedPayment);
+        setProcessing(false);
+        return;
+      }
+
+      // 2. Load Razorpay SDK for live/configured keys
+      const sdkLoaded = await loadRazorpayScript();
+
+      if (!sdkLoaded || !window.Razorpay) {
+        const mockPaymentId = `pay_test_${Date.now()}`;
+        const mockSig = `sig_valid_test_${orderData.order_id}`;
+
+        const verifiedPayment = await verifyPaymentApi({
+          razorpay_order_id: orderData.order_id,
+          razorpay_payment_id: mockPaymentId,
+          razorpay_signature: mockSig,
+        });
+
+        setPayment(verifiedPayment);
+        if (onPaymentSuccess) onPaymentSuccess(verifiedPayment);
+        setProcessing(false);
         return;
       }
 
       // 3. Open Razorpay Checkout Modal
       const options = {
-        key: orderData.key_id || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || 'rzp_test_fuelshare123',
+        key: orderData.key_id,
         amount: orderData.amount_paise,
         currency: orderData.currency,
         name: 'Fuel Share',
@@ -132,7 +157,7 @@ export const PaymentCard: React.FC<PaymentCardProps> = ({
 
       const razorpayInstance = new window.Razorpay(options);
       razorpayInstance.on('payment.failed', function (response: any) {
-        setError(response.error.description || 'Payment failed. Please try again.');
+        setError(response.error?.description || 'Payment failed. Please try again.');
         setProcessing(false);
       });
       razorpayInstance.open();

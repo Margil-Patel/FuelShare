@@ -334,12 +334,27 @@ export default function FuelShareDetailPage() {
               >
                 <div>
                   <span className="uppercase text-[10px] tracking-wider block font-bold">Your Join Request</span>
-                  <span className="text-sm font-extrabold">
+                  <span className="text-sm font-extrabold flex items-center gap-2 flex-wrap">
                     {myRequest.status === 'ACCEPTED' && '✅ Accepted! Seat Reserved.'}
                     {myRequest.status === 'PENDING' && '⏳ Join Request Pending Approval'}
                     {myRequest.status === 'REJECTED' && '❌ Request Rejected by Creator'}
                     {myRequest.status === 'CANCELLED' && 'Request Cancelled'}
+                    {(myRequest.is_paid || myRequest.payment_status === 'SUCCESS') && (
+                      <span className="bg-emerald-600 text-white text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full font-bold">
+                        Paid
+                      </span>
+                    )}
                   </span>
+                  {myRequest.pickup_name && myRequest.drop_name && (
+                    <div className="text-xs font-medium text-slate-600 mt-1">
+                      📍 Your Segment: <span className="font-semibold text-slate-900">{myRequest.pickup_name} → {myRequest.drop_name}</span>
+                    </div>
+                  )}
+                  {myRequest.fare_amount !== null && myRequest.fare_amount !== undefined && (
+                    <div className="text-xs font-bold text-emerald-700 mt-0.5">
+                      Your Proportional Share: ₹{myRequest.fare_amount.toFixed(2)}
+                    </div>
+                  )}
                 </div>
 
                 {myRequest.status === 'PENDING' && (
@@ -358,7 +373,11 @@ export default function FuelShareDetailPage() {
               <div className="pt-2">
                 <PaymentCard
                   fuelShareId={trip.id}
-                  contributionAmount={cost?.cost_per_participant || trip.estimated_fuel_cost}
+                  contributionAmount={
+                    myRequest.fare_amount !== null && myRequest.fare_amount !== undefined
+                      ? myRequest.fare_amount
+                      : cost?.cost_per_participant || trip.estimated_fuel_cost
+                  }
                   onPaymentSuccess={() => loadTripData()}
                 />
               </div>
@@ -513,8 +532,12 @@ export default function FuelShareDetailPage() {
               <p className="text-xl font-black text-slate-900 mt-0.5">{cost.participant_count} People</p>
             </div>
             <div>
-              <span className="text-xs font-semibold text-slate-500 uppercase">Cost Per Person</span>
-              <p className="text-xl font-black text-emerald-600 mt-0.5">₹{cost.cost_per_participant}</p>
+              <span className="text-xs font-semibold text-slate-500 uppercase">
+                {myRequest?.fare_amount !== null && myRequest?.fare_amount !== undefined ? 'Your Segment Share' : 'Cost Per Person'}
+              </span>
+              <p className="text-xl font-black text-emerald-600 mt-0.5">
+                ₹{myRequest?.fare_amount !== null && myRequest?.fare_amount !== undefined ? myRequest.fare_amount.toFixed(2) : cost.cost_per_participant}
+              </p>
             </div>
             <div>
               <span className="text-xs font-semibold text-slate-500 uppercase">Estimated Savings / Person</span>

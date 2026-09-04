@@ -30,9 +30,9 @@ class RideRequest(Base):
     drop_latitude: Mapped[float] = mapped_column(Float, nullable=False)
     drop_longitude: Mapped[float] = mapped_column(Float, nullable=False)
 
-    # Desired departure datetime (combined for easy comparison)
-    desired_departure: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=False), nullable=False
+    # Desired departure datetime (optional)
+    desired_departure: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=False), nullable=True
     )
 
     seats_needed: Mapped[int] = mapped_column(Integer, default=1, nullable=False)

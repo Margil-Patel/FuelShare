@@ -84,6 +84,11 @@ export interface JoinRequest {
   status: 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'CANCELLED';
   requested_at: string;
   accepted_at?: string | null;
+  fare_amount?: number | null;
+  pickup_name?: string | null;
+  drop_name?: string | null;
+  payment_status?: string | null;
+  is_paid?: boolean;
   user?: {
     id: number;
     name: string;
@@ -203,7 +208,7 @@ export interface RideRequest {
   drop_name: string;
   drop_latitude: number;
   drop_longitude: number;
-  desired_departure: string;
+  desired_departure?: string | null;
   seats_needed: number;
   status: RideRequestStatus;
   created_at: string;
@@ -217,7 +222,7 @@ export interface RideRequestCreate {
   drop_name: string;
   drop_latitude: number;
   drop_longitude: number;
-  desired_departure: string;
+  desired_departure?: string | null;
   seats_needed?: number;
 }
 
@@ -257,7 +262,7 @@ export interface CorridorMatchListResponse {
   total_matches: number;
   buffer_m: number;
   detour_max_km: number;
-  time_window_minutes: number;
+  time_window_minutes?: number | null;
   matches: CorridorMatchResult[];
 }
 

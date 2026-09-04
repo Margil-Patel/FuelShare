@@ -20,8 +20,8 @@ class RideRequestCreate(BaseModel):
     drop_name: str = Field(..., min_length=1, example="SG Highway, Ahmedabad")
     drop_latitude: float = Field(..., ge=-90.0, le=90.0, example=23.0390)
     drop_longitude: float = Field(..., ge=-180.0, le=180.0, example=72.5062)
-    desired_departure: datetime.datetime = Field(
-        ..., example="2026-09-10T09:00:00"
+    desired_departure: datetime.datetime | None = Field(
+        default=None, example="2026-09-10T09:00:00"
     )
     seats_needed: int = Field(default=1, ge=1, le=8, example=1)
 
@@ -45,7 +45,7 @@ class RideRequestResponse(BaseModel):
     drop_name: str
     drop_latitude: float
     drop_longitude: float
-    desired_departure: datetime.datetime
+    desired_departure: datetime.datetime | None = None
     seats_needed: int
     status: RideRequestStatusEnum
     created_at: datetime.datetime

@@ -1,305 +1,350 @@
 'use client';
 
 import React, { useState } from 'react';
+import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { ErrorAlert } from '@/components/ui/ErrorAlert';
+import { LocationAutocomplete } from '@/components/ui/LocationAutocomplete';
+import { RouteMapPicker } from '@/components/ui/RouteMapPicker';
 import { CorridorMatchCard } from '@/components/matching/CorridorMatchCard';
-import { RouteMap } from '@/components/matching/RouteMap';
 import { createRideRequestApi } from '@/lib/api/rideRequest';
 import { getCorridorMatchesForRequestApi } from '@/lib/api/matching';
 import { joinFuelShareApi } from '@/lib/api/joinRequest';
 import { useAuth } from '@/context/AuthContext';
 import { CorridorMatchResult, RideRequest } from '@/lib/api/types';
 
-type Step = 'form' | 'results';
+interface LocationPoint {
+  name: string;
+  latitude: number;
+  longitude: number;
+}
 
 export default function CorridorMatchesPage() {
   const { user } = useAuth();
-  const [step, setStep] = useState<Step>('form');
 
-  // Form fields
-  const [pickupName, setPickupName] = useState('');
-  const [pickupLat, setPickupLat] = useState('');
-  const [pickupLon, setPickupLon] = useState('');
-  const [dropName, setDropName] = useState('');
-  const [dropLat, setDropLat] = useState('');
-  const [dropLon, setDropLon] = useState('');
-  const [desiredTime, setDesiredTime] = useState('');
-  const [seatsNeeded, setSeatsNeeded] = useState('1');
-  const [bufferM, setBufferM] = useState('500');
-  const [timeWindow, setTimeWindow] = useState('30');
+  // Selected Points
+  const [pickup, setPickup] = useState<LocationPoint | null>(null);
+  const [pickupInput, setPickupInput] = useState('');
 
-  // State
+  const [drop, setDrop] = useState<LocationPoint | null>(null);
+  const [dropInput, setDropInput] = useState('');
+
+  const [seatsNeeded, setSeatsNeeded] = useState(1);
+  const [activeMapMode, setActiveMapMode] = useState<'origin' | 'destination'>('origin');
+
+  // Search / Result State
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [rideRequest, setRideRequest] = useState<RideRequest | null>(null);
+  const [searchedRequest, setSearchedRequest] = useState<RideRequest | null>(null);
   const [matches, setMatches] = useState<CorridorMatchResult[]>([]);
+  const [hasSearched, setHasSearched] = useState(false);
   const [joinSuccess, setJoinSuccess] = useState<Record<number, boolean>>({});
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user) { setError('Please log in to search for corridor matches.'); return; }
+  const handleSelectPickup = (loc: LocationPoint) => {
+    setPickup(loc);
+    setPickupInput(loc.name);
+    // Switch to destination mode if not yet set
+    if (!drop) {
+      setActiveMapMode('destination');
+    }
+  };
+
+  const handleSelectDrop = (loc: LocationPoint) => {
+    setDrop(loc);
+    setDropInput(loc.name);
+  };
+
+  const handleSearch = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+
+    if (!user) {
+      setError('Please log in to search for route matches.');
+      return;
+    }
+
+    if (!pickup || !drop) {
+      setError('Please select both a pickup location and a drop location.');
+      return;
+    }
+
+    if (pickup.latitude === drop.latitude && pickup.longitude === drop.longitude) {
+      setError('Pickup and drop locations cannot be the exact same point.');
+      return;
+    }
 
     setLoading(true);
     setError(null);
 
     try {
-      // Step 1: Create the ride request
+      // Step 1: Create or submit the ride request without requiring date/time
       const req = await createRideRequestApi({
-        pickup_name: pickupName,
-        pickup_latitude: parseFloat(pickupLat),
-        pickup_longitude: parseFloat(pickupLon),
-        drop_name: dropName,
-        drop_latitude: parseFloat(dropLat),
-        drop_longitude: parseFloat(dropLon),
-        desired_departure: desiredTime,
-        seats_needed: parseInt(seatsNeeded, 10) || 1,
+        pickup_name: pickup.name,
+        pickup_latitude: pickup.latitude,
+        pickup_longitude: pickup.longitude,
+        drop_name: drop.name,
+        drop_latitude: drop.latitude,
+        drop_longitude: drop.longitude,
+        seats_needed: seatsNeeded,
       });
-      setRideRequest(req);
+      setSearchedRequest(req);
 
-      // Step 2: Find corridor matches
+      // Step 2: Query corridor matches for active rides
       const result = await getCorridorMatchesForRequestApi(req.id, {
-        buffer_m: parseInt(bufferM, 10),
-        time_window_minutes: parseInt(timeWindow, 10),
+        buffer_m: 1000, // 1km default buffer
       });
 
       setMatches(result.matches);
-      setStep('results');
+      setHasSearched(true);
     } catch (err: any) {
-      setError(err.detail ?? err.message ?? 'Failed to search for corridor matches.');
+      setError(err.detail ?? err.message ?? 'Failed to find matching routes.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleJoin = async (matchId: number) => {
-    // Find the match and join the corresponding fuel share
-    const match = matches.find(m => m.match_id === matchId);
-    if (!match) return;
+  const handleJoin = async (targetId: number) => {
     try {
-      await joinFuelShareApi(match.fuel_share_id);
-      setJoinSuccess(prev => ({ ...prev, [matchId]: true }));
+      await joinFuelShareApi(targetId);
+      setJoinSuccess(prev => ({ ...prev, [targetId]: true }));
     } catch (err: any) {
       setError(err.detail ?? err.message ?? 'Failed to submit join request.');
     }
   };
 
-  const resetForm = () => {
-    setStep('form');
-    setMatches([]);
-    setRideRequest(null);
-    setError(null);
-  };
-
   return (
-    <div className="space-y-8">
-      {/* Page header */}
+    <div className="space-y-8 max-w-6xl mx-auto">
+      {/* Page Header */}
       <div>
-        <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
+        <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
           🗺️ Find a Ride by Route
         </h1>
         <p className="text-sm text-slate-500 mt-1">
-          Enter your pickup and drop points — we'll find rides whose route passes through your corridor.
+          Enter your pickup and drop-off points. We'll find active riders whose route passes right through your journey.
         </p>
       </div>
 
       {error && <ErrorAlert message={error} onRetry={() => setError(null)} />}
 
-      {step === 'form' && (
+      {/* Main Search & Map Picker Card */}
+      <Card className="p-6 space-y-6">
         <form onSubmit={handleSearch} className="space-y-6">
-          {/* Pickup section */}
-          <Card>
-            <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider mb-4">
-              📍 Your Pickup Point (C)
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <Input
-                label="Pickup Location Name"
-                placeholder="e.g. Bopal Cross Roads"
-                value={pickupName}
-                onChange={e => setPickupName(e.target.value)}
-                required
-              />
-              <Input
-                label="Latitude"
-                type="number"
-                step="any"
-                placeholder="23.0225"
-                value={pickupLat}
-                onChange={e => setPickupLat(e.target.value)}
-                required
-              />
-              <Input
-                label="Longitude"
-                type="number"
-                step="any"
-                placeholder="72.4716"
-                value={pickupLon}
-                onChange={e => setPickupLon(e.target.value)}
-                required
-              />
-            </div>
-          </Card>
-
-          {/* Drop section */}
-          <Card>
-            <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider mb-4">
-              🏁 Your Drop Point (D)
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <Input
-                label="Drop Location Name"
-                placeholder="e.g. SG Highway"
-                value={dropName}
-                onChange={e => setDropName(e.target.value)}
-                required
-              />
-              <Input
-                label="Latitude"
-                type="number"
-                step="any"
-                placeholder="23.0390"
-                value={dropLat}
-                onChange={e => setDropLat(e.target.value)}
-                required
-              />
-              <Input
-                label="Longitude"
-                type="number"
-                step="any"
-                placeholder="72.5062"
-                value={dropLon}
-                onChange={e => setDropLon(e.target.value)}
-                required
-              />
-            </div>
-          </Card>
-
-          {/* Time + Advanced */}
-          <Card>
-            <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider mb-4">
-              ⚙️ Trip Preferences
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-              <div className="sm:col-span-2">
-                <Input
-                  label="Desired Departure"
-                  type="datetime-local"
-                  value={desiredTime}
-                  onChange={e => setDesiredTime(e.target.value)}
-                  required
-                />
+          {/* Location Inputs */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Pickup Location */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span>
+                  Pickup Location <span className="text-rose-500">*</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setActiveMapMode('origin')}
+                  className={`text-xs px-2.5 py-0.5 rounded-full font-semibold transition-all ${
+                    activeMapMode === 'origin'
+                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-xs'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  📍 {activeMapMode === 'origin' ? 'Click Map to Place' : 'Pick on Map'}
+                </button>
               </div>
-              <Input
-                label="Seats Needed"
-                type="number"
-                min="1"
-                max="8"
-                value={seatsNeeded}
-                onChange={e => setSeatsNeeded(e.target.value)}
-              />
-              <Input
-                label="Buffer (meters)"
-                type="number"
-                min="50"
-                max="5000"
-                value={bufferM}
-                onChange={e => setBufferM(e.target.value)}
+              <LocationAutocomplete
+                label=""
+                placeholder="Search pickup area or click map..."
+                value={pickupInput}
+                onChange={(val) => {
+                  setPickupInput(val);
+                  if (pickup && pickup.name !== val) {
+                    setPickup(null);
+                  }
+                }}
+                onSelectLocation={handleSelectPickup}
+                required
               />
             </div>
-            <div className="mt-3 grid grid-cols-1 sm:grid-cols-4 gap-4">
-              <Input
-                label="Time Window (±mins)"
-                type="number"
-                min="5"
-                max="120"
-                value={timeWindow}
-                onChange={e => setTimeWindow(e.target.value)}
-              />
-            </div>
-          </Card>
 
-          <div className="flex justify-end">
-            <Button type="submit" variant="primary" size="lg" isLoading={loading}>
-              🔍 Search Corridor Matches
+            {/* Drop Location */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block"></span>
+                  Drop-off Location <span className="text-rose-500">*</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setActiveMapMode('destination')}
+                  className={`text-xs px-2.5 py-0.5 rounded-full font-semibold transition-all ${
+                    activeMapMode === 'destination'
+                      ? 'bg-rose-100 text-rose-800 border border-rose-300 shadow-xs'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  🎯 {activeMapMode === 'destination' ? 'Click Map to Place' : 'Pick on Map'}
+                </button>
+              </div>
+              <LocationAutocomplete
+                label=""
+                placeholder="Search drop location or click map..."
+                value={dropInput}
+                onChange={(val) => {
+                  setDropInput(val);
+                  if (drop && drop.name !== val) {
+                    setDrop(null);
+                  }
+                }}
+                onSelectLocation={handleSelectDrop}
+                required
+              />
+            </div>
+          </div>
+
+          {/* Map Preview & Pinning */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs text-slate-500">
+              <span>
+                💡 Tip: Click anywhere on the map to set the{' '}
+                <strong className={activeMapMode === 'origin' ? 'text-emerald-600 font-bold' : 'text-rose-600 font-bold'}>
+                  {activeMapMode === 'origin' ? 'Pickup Point (📍)' : 'Drop-off Point (🎯)'}
+                </strong>
+              </span>
+              <div className="flex items-center gap-3">
+                <span className="flex items-center gap-1">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Pickup
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span> Drop-off
+                </span>
+              </div>
+            </div>
+
+            <div className="rounded-2xl overflow-hidden border border-slate-200 shadow-inner">
+              <RouteMapPicker
+                origin={pickup}
+                destination={drop}
+                activeMode={activeMapMode}
+                setActiveMode={setActiveMapMode}
+                onSelectOrigin={handleSelectPickup}
+                onSelectDestination={handleSelectDrop}
+              />
+            </div>
+          </div>
+
+          {/* Action Row */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2 border-t border-slate-100">
+            <div className="flex items-center gap-3 text-xs text-slate-600">
+              <span className="font-semibold">Seats needed:</span>
+              <select
+                value={seatsNeeded}
+                onChange={(e) => setSeatsNeeded(parseInt(e.target.value, 10))}
+                className="bg-white border border-slate-200 rounded-lg px-2.5 py-1 text-slate-800 font-bold focus:ring-2 focus:ring-indigo-500"
+              >
+                {[1, 2, 3, 4, 5, 6].map((num) => (
+                  <option key={num} value={num}>
+                    {num} {num === 1 ? 'seat' : 'seats'}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <Button
+              type="submit"
+              variant="primary"
+              size="lg"
+              isLoading={loading}
+              disabled={!pickup || !drop}
+              className="w-full sm:w-auto shadow-md hover:shadow-indigo-200"
+            >
+              🔍 Search Rides Covering This Route
             </Button>
           </div>
         </form>
-      )}
+      </Card>
 
-      {step === 'results' && (
+      {/* Results Section */}
+      {loading && <LoadingSpinner message="Scanning active rider routes that pass through your points..." />}
+
+      {!loading && hasSearched && (
         <div className="space-y-6">
-          {/* Summary bar */}
-          <div className="flex items-center justify-between gap-4 flex-wrap">
+          {/* Search Result Summary Header */}
+          <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
-              <p className="text-sm font-bold text-slate-700">
-                Found <span className="text-indigo-600">{matches.length}</span> ride{matches.length !== 1 ? 's' : ''} matching your corridor
-              </p>
-              {rideRequest && (
-                <p className="text-xs text-slate-400 mt-0.5">
-                  {rideRequest.pickup_name} → {rideRequest.drop_name} · Request #{rideRequest.id}
+              <h2 className="text-xl font-black text-slate-900">
+                {matches.length > 0 ? (
+                  <span>
+                    🎉 Found <span className="text-indigo-600">{matches.length}</span> Matching{' '}
+                    {matches.length === 1 ? 'Rider' : 'Riders'}
+                  </span>
+                ) : (
+                  'No Direct Route Matches Found'
+                )}
+              </h2>
+              {searchedRequest && (
+                <p className="text-xs text-slate-500 mt-1">
+                  Your desired trip: <strong className="text-slate-800">{searchedRequest.pickup_name}</strong> →{' '}
+                  <strong className="text-slate-800">{searchedRequest.drop_name}</strong>
                 </p>
               )}
             </div>
-            <Button variant="outline" size="sm" onClick={resetForm}>
-              ← New Search
-            </Button>
           </div>
 
-          {/* Corridor overview map (passenger's points, no route) */}
-          {rideRequest && (
-            <Card>
-              <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Your Corridor</h3>
-              <RouteMap
-                pickup={{ lat: rideRequest.pickup_latitude, lng: rideRequest.pickup_longitude, label: rideRequest.pickup_name }}
-                drop={{ lat: rideRequest.drop_latitude, lng: rideRequest.drop_longitude, label: rideRequest.drop_name }}
-                height="200px"
-              />
-              <p className="text-xs text-slate-400 mt-2 text-center">
-                🟠 Orange = Your pickup (C) &nbsp;·&nbsp; 🟣 Purple = Your drop (D)
+          {/* Match Results List */}
+          {matches.length === 0 ? (
+            <Card className="text-center py-12 space-y-3">
+              <div className="text-4xl">🚗</div>
+              <p className="text-base font-bold text-slate-800">
+                No active rider is currently travelling along this specific path.
               </p>
-            </Card>
-          )}
-
-          {/* Match cards */}
-          {loading ? (
-            <LoadingSpinner message="Searching route corridors..." />
-          ) : matches.length === 0 ? (
-            <Card className="text-center py-12">
-              <div className="text-4xl mb-3">🔍</div>
-              <p className="text-base font-bold text-slate-700">No corridor matches found.</p>
-              <p className="text-xs text-slate-500 mt-1">
-                Try increasing the buffer distance or time window, or check back later when more rides are available.
+              <p className="text-xs text-slate-500 max-w-md mx-auto">
+                You can browse all scheduled trips on the Available Trips page or offer your own trip.
               </p>
-              <Button variant="outline" size="sm" className="mt-4" onClick={resetForm}>
-                Adjust Search
-              </Button>
+              <div className="pt-3">
+                <Link href="/fuel-shares">
+                  <Button variant="outline" size="sm">
+                    Browse All Fuel Shares
+                  </Button>
+                </Link>
+              </div>
             </Card>
           ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {matches.map((match, idx) => (
-                <div key={`${match.fuel_share_id}-${idx}`}>
-                  {joinSuccess[match.match_id ?? -1] ? (
-                    <Card className="border-emerald-200 bg-emerald-50">
-                      <p className="text-sm font-bold text-emerald-700">
-                        ✓ Join request sent for Ride #{match.fuel_share_id}
-                      </p>
-                      <p className="text-xs text-emerald-600 mt-1">
-                        The driver will review and accept your request.
-                      </p>
-                    </Card>
-                  ) : (
-                    <CorridorMatchCard
-                      match={match}
-                      viewMode="passenger"
-                      onJoin={handleJoin}
-                    />
-                  )}
+            <div className="space-y-6">
+              <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 text-emerald-800 text-xs flex items-center gap-3">
+                <span className="text-xl">✨</span>
+                <div>
+                  <strong>Your route lies directly along these drivers' journeys!</strong> You can join any of these
+                  rides with minimal or zero detour for the driver.
                 </div>
-              ))}
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {matches.map((match, idx) => {
+                  const joinKey = match.fuel_share_id;
+                  const isJoined = joinSuccess[joinKey] || joinSuccess[match.match_id ?? -1];
+
+                  return (
+                    <div key={`${match.fuel_share_id}-${idx}`} className="flex flex-col">
+                      {isJoined ? (
+                        <Card className="border-emerald-200 bg-emerald-50 p-6 space-y-2">
+                          <p className="text-sm font-bold text-emerald-700 flex items-center gap-2">
+                            <span>✓</span> Request Sent to Driver for Ride #{match.fuel_share_id}
+                          </p>
+                          <p className="text-xs text-emerald-600">
+                            The driver will receive your request to join at {match.pickup_name} and drop at {match.drop_name}.
+                          </p>
+                        </Card>
+                      ) : (
+                        <CorridorMatchCard
+                          match={match}
+                          viewMode="passenger"
+                          onJoin={() => handleJoin(match.fuel_share_id)}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>

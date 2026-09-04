@@ -37,6 +37,11 @@ class JoinRequestResponse(BaseModel):
     status: JoinRequestStatus
     requested_at: datetime.datetime
     accepted_at: datetime.datetime | None = None
+    fare_amount: float | None = None
+    pickup_name: str | None = None
+    drop_name: str | None = None
+    payment_status: str | None = None
+    is_paid: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 

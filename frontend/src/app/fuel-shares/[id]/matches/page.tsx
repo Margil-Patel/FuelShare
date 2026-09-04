@@ -108,17 +108,28 @@ export default function FindMatchesPage({
         {loading ? (
           <LoadingSpinner message="Calculating route compatibility and spatial proximity..." />
         ) : !matchData || matchData.matches.length === 0 ? (
-          <Card className="text-center py-12">
-            <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-2xl mx-auto mb-3">
+          <Card className="text-center py-12 space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-2xl mx-auto">
               🔍
             </div>
-            <h3 className="text-lg font-bold text-slate-900">No compatible Fuel Shares found yet</h3>
-            <p className="text-xs text-slate-500 max-w-md mx-auto mt-1 mb-6">
-              Our matching engine filters trips based on spatial route proximity, time windows, and available seats. Try checking back later or adjusting your departure schedule.
-            </p>
-            <Button variant="outline" size="sm" onClick={fetchMatches}>
-              🔄 Refresh Matches
-            </Button>
+            <div>
+              <h3 className="text-lg font-bold text-slate-900">No other driver trips to merge with yet</h3>
+              <p className="text-xs text-slate-500 max-w-md mx-auto mt-1">
+                This page matches full driver trips together. If you're looking for passengers who requested pickups along your route, check the Corridor Passengers tab or your Incoming Join Requests.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+              <Button variant="primary" size="sm" onClick={() => router.push(`/fuel-shares/${id}/corridor`)}>
+                🛣️ View Corridor Passengers
+              </Button>
+              <Button variant="secondary" size="sm" onClick={() => router.push(`/fuel-shares/${id}`)}>
+                📥 View Incoming Join Requests
+              </Button>
+              <Button variant="outline" size="sm" onClick={fetchMatches}>
+                🔄 Refresh
+              </Button>
+            </div>
           </Card>
         ) : (
           <div className="space-y-4">

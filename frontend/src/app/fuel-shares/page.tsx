@@ -20,7 +20,6 @@ export default function FuelSharesPage() {
 
   const [sourceFilter, setSourceFilter] = useState('');
   const [destinationFilter, setDestinationFilter] = useState('');
-  const [dateFilter, setDateFilter] = useState('');
 
   const fetchTrips = async () => {
     setLoading(true);
@@ -29,7 +28,6 @@ export default function FuelSharesPage() {
       const data = await getFuelSharesApi({
         source: sourceFilter || undefined,
         destination: destinationFilter || undefined,
-        departure_date: dateFilter || undefined,
       });
       setFuelShares(data);
     } catch (err: any) {
@@ -66,7 +64,7 @@ export default function FuelSharesPage() {
 
       {/* Filter Card */}
       <Card>
-        <form onSubmit={handleSearch} className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
+        <form onSubmit={handleSearch} className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
           <Input
             label="Starting Point"
             placeholder="e.g. Bopal, Koramangala"
@@ -79,13 +77,6 @@ export default function FuelSharesPage() {
             placeholder="e.g. SG Highway, Airport"
             value={destinationFilter}
             onChange={(e) => setDestinationFilter(e.target.value)}
-          />
-
-          <Input
-            label="Departure Date"
-            type="date"
-            value={dateFilter}
-            onChange={(e) => setDateFilter(e.target.value)}
           />
 
           <Button type="submit" variant="secondary" className="w-full">

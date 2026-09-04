@@ -110,12 +110,55 @@ class JoinRequestService:
         db: Session, current_user: User
     ) -> list[JoinRequest]:
         """View all join requests submitted by the current user."""
-        return (
+        requests = (
             db.query(JoinRequest)
             .filter(JoinRequest.user_id == current_user.id)
             .order_by(JoinRequest.requested_at.desc())
             .all()
         )
+
+        from app.models.corridor_match import CorridorMatch
+        from app.models.ride_request import RideRequest
+        from app.models.payment import Payment
+        from app.schemas.payment import PaymentStatus
+
+        for req in requests:
+            match = (
+                db.query(CorridorMatch)
+                .join(RideRequest, RideRequest.id == CorridorMatch.ride_request_id)
+                .filter(
+                    CorridorMatch.fuel_share_id == req.fuel_share_id,
+                    RideRequest.passenger_id == current_user.id,
+                )
+                .order_by(CorridorMatch.id.desc())
+                .first()
+            )
+            if match:
+                setattr(req, "fare_amount", round(match.fare_estimate, 2))
+                if match.ride_request:
+                    setattr(req, "pickup_name", match.ride_request.pickup_name)
+                    setattr(req, "drop_name", match.ride_request.drop_name)
+
+            payment = (
+                db.query(Payment)
+                .filter(
+                    Payment.fuel_share_id == req.fuel_share_id,
+                    Payment.user_id == current_user.id,
+                )
+                .order_by(Payment.id.desc())
+                .first()
+            )
+            if payment and payment.status == PaymentStatus.SUCCESS.value:
+                setattr(req, "payment_status", "SUCCESS")
+                setattr(req, "is_paid", True)
+            elif payment:
+                setattr(req, "payment_status", payment.status)
+                setattr(req, "is_paid", False)
+            else:
+                setattr(req, "payment_status", None)
+                setattr(req, "is_paid", False)
+
+        return requests
 
     @staticmethod
     def accept_join_request(

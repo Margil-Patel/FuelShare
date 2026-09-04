@@ -234,10 +234,6 @@ class CorridorMatchingService:
         buffer_m = buffer_m if buffer_m is not None else settings.CORRIDOR_BUFFER_M
         detour_max_km = detour_max_km if detour_max_km is not None else settings.CORRIDOR_DETOUR_MAX_KM
         detour_max_pct = detour_max_pct if detour_max_pct is not None else settings.CORRIDOR_DETOUR_MAX_PCT
-        time_window_minutes = (
-            time_window_minutes if time_window_minutes is not None
-            else settings.CORRIDOR_TIME_WINDOW_MINUTES
-        )
 
         request = RideRequestService.get_ride_request_by_id(db, ride_request_id)
 
@@ -247,12 +243,15 @@ class CorridorMatchingService:
                 detail="Not authorized to view matches for this ride request.",
             )
 
-        desired_dt = request.desired_departure
-        window = datetime.timedelta(minutes=time_window_minutes)
-        earliest = desired_dt - window
-        latest = desired_dt + window
+        if time_window_minutes is not None and time_window_minutes > 0:
+            window = datetime.timedelta(minutes=time_window_minutes)
+            earliest = request.desired_departure - window
+            latest = request.desired_departure + window
+        else:
+            earliest = None
+            latest = None
 
-        # Candidate rides: ACTIVE, has seats, departure in time window
+        # Candidate rides: ACTIVE, has seats, departure in time window (if specified)
         candidates = (
             db.query(FuelShare)
             .filter(
@@ -265,9 +264,10 @@ class CorridorMatchingService:
 
         results: list[CorridorMatchResult] = []
         for trip in candidates:
-            dep_dt = _fuel_share_departure_dt(trip)
-            if not (earliest <= dep_dt <= latest):
-                continue
+            if earliest is not None and latest is not None:
+                dep_dt = _fuel_share_departure_dt(trip)
+                if not (earliest <= dep_dt <= latest):
+                    continue
 
             match_result = CorridorMatchingService._run_corridor_check(
                 trip, request, buffer_m, detour_max_km, detour_max_pct
@@ -300,10 +300,6 @@ class CorridorMatchingService:
         buffer_m = buffer_m if buffer_m is not None else settings.CORRIDOR_BUFFER_M
         detour_max_km = detour_max_km if detour_max_km is not None else settings.CORRIDOR_DETOUR_MAX_KM
         detour_max_pct = detour_max_pct if detour_max_pct is not None else settings.CORRIDOR_DETOUR_MAX_PCT
-        time_window_minutes = (
-            time_window_minutes if time_window_minutes is not None
-            else settings.CORRIDOR_TIME_WINDOW_MINUTES
-        )
 
         trip = db.query(FuelShare).filter(FuelShare.id == fuel_share_id).first()
         if not trip:
@@ -317,23 +313,27 @@ class CorridorMatchingService:
                 detail="Not authorized to view corridor matches for this Fuel Share.",
             )
 
-        dep_dt = _fuel_share_departure_dt(trip)
-        window = datetime.timedelta(minutes=time_window_minutes)
-        earliest = dep_dt - window
-        latest = dep_dt + window
+        if time_window_minutes is not None and time_window_minutes > 0:
+            dep_dt = _fuel_share_departure_dt(trip)
+            window = datetime.timedelta(minutes=time_window_minutes)
+            earliest = dep_dt - window
+            latest = dep_dt + window
+        else:
+            earliest = None
+            latest = None
 
-        # Candidate requests: OPEN, in time window
-        candidates = (
-            db.query(RideRequest)
-            .filter(
-                RideRequest.status == RideRequestStatus.OPEN,
-                RideRequest.seats_needed <= trip.available_seats,
+        # Candidate requests: OPEN, seats available, non-creator
+        query = db.query(RideRequest).filter(
+            RideRequest.status == RideRequestStatus.OPEN,
+            RideRequest.seats_needed <= trip.available_seats,
+            RideRequest.passenger_id != current_user.id,
+        )
+        if earliest is not None and latest is not None:
+            query = query.filter(
                 RideRequest.desired_departure >= earliest,
                 RideRequest.desired_departure <= latest,
-                RideRequest.passenger_id != current_user.id,
             )
-            .all()
-        )
+        candidates = query.all()
 
         results: list[CorridorMatchResult] = []
         for request in candidates:
